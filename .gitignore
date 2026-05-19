@@ -1,0 +1,16 @@
+# 环境变量（含 API Key，绝对不能提交）
+.env
+.env.test
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 生成的报告
+visual_test_report.html
+
+# IDE
+.idea/
+.vsco
