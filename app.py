@@ -271,7 +271,10 @@ st.caption("Claude Agent SDK · 四维分析 · 可视化测试")
 
 # 解析股票
 resolved = resolve_stock_code(stock_input)
-if resolved["status"] == "not_found":
+if resolved.get("status") == "error":
+    st.error(f"数据接口异常：{resolved.get('message', '未知错误')}，请稍后重试或切换到 mock 模式。")
+    st.stop()
+elif resolved["status"] == "not_found":
     st.error(f"未找到股票。{resolved.get('suggestion', '')}")
     st.stop()
 elif resolved["status"] == "multiple":
