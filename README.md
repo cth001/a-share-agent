@@ -192,6 +192,40 @@ a-share-agent/
 | `get_sector_news` | 行业新闻与政策 |
 | `search_analyst_reports` | 券商研报与评级 |
 
+## 开发与更新
+
+修改代码后，提交并推送到 GitHub：
+
+```bash
+git add -A
+git commit -m "描述本次改动"
+git push
+```
+
+常用操作：
+
+```bash
+# 查看当前修改状态
+git status
+
+# 查看具体改动内容
+git diff
+
+# 拉取远程最新代码
+git pull
+
+# 撤销未提交的修改
+git checkout -- <文件名>
+```
+
+首次推送如果遇到认证问题，需要使用 Personal Access Token（PAT）：
+
+```bash
+# 生成 Token：GitHub → Settings → Developer settings → Personal access tokens
+# 更新远程地址（替换 YOUR_TOKEN）
+git remote set-url origin https://cth001:YOUR_TOKEN@github.com/cth001/a-share-agent.git
+```
+
 ## 技术栈
 
 - **Agent 框架**：Claude Agent SDK（Anthropic API + Tool Use）
