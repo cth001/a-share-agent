@@ -248,17 +248,66 @@ def findings_html(dim, data):
     </div>'''
 
 score_cards = '<div style="display:flex;gap:16px;flex-wrap:wrap;margin:20px 0;">' + "".join(score_card_html(d, analysis[d]) for d in dim_keys) + '</div>'
-all_findings = "".join(findings_html(d, analysis[d]) for d in dim_keys)
-sub_chart_html = "".join(f'<div style="flex:1;min-width:300px;">{sub_charts[d]}</div>' for d in dim_keys if d in sub_charts)
+
+# 子维度详情（对齐 app.py：progress bar + 关键发现 + 风险，每维度一个折叠块）
+def dim_detail_block(dim, data):
+    color = DIM_COLORS[dim]
+    icon = DIM_ICONS[dim]
+    label = DIM_LABELS[dim]
+    # progress bars for sub_scores
+    bars = ""
+    if "sub_scores" in data:
+        for sub_name, sub_info in data["sub_scores"].items():
+            pct = sub_info["score"]
+            bars += f'''<div style="margin:6px 0;">
+                <div style="display:flex;justify-content:space-between;font-size:13px;">
+                    <span>{sub_name}: {sub_info["summary"]}</span><span><b>{pct}</b>分</span>
+                </div>
+                <div style="background:#e5e7eb;border-radius:4px;height:8px;margin-top:3px;">
+                    <div style="background:{color};height:8px;border-radius:4px;width:{pct}%;"></div>
+                </div>
+            </div>'''
+    # key findings
+    findings = ""
+    for f in data.get("key_findings", []):
+        findings += f'<li style="margin:3px 0;font-size:13px;">{f}</li>'
+    # risks
+    risks = ""
+    for r in data.get("risks", []):
+        risks += f'<div style="background:#FEF3C7;border-left:3px solid #F59E0B;padding:8px 12px;margin:4px 0;border-radius:4px;font-size:13px;">⚠️ {r}</div>'
+    return f'''
+    <details style="margin-bottom:12px;border:1px solid #eee;border-radius:8px;padding:12px;" {"open" if dim == "fundamental" else ""}>
+        <summary style="cursor:pointer;font-weight:600;color:{color};font-size:15px;">{icon} {label} ({data["score"]}分)</summary>
+        <div style="margin-top:10px;">{bars}</div>
+        <div style="margin-top:10px;"><b>📌 关键发现</b><ul style="padding-left:20px;">{findings}</ul></div>
+        {f'<div style="margin-top:8px;"><b>⚠️ 风险点</b>{risks}</div>' if risks else ''}
+    </details>'''
+
+dim_detail_html = "".join(dim_detail_block(d, analysis[d]) for d in dim_keys)
 
 tech_cards = "".join(f'<div style="flex:1;text-align:center;padding:12px;background:#f8f9fa;border-radius:8px;min-width:120px;"><div style="font-size:12px;color:#666;">{k}</div><div style="font-size:18px;font-weight:600;margin-top:4px;">{v}</div></div>' for k, v in tech_summary.items())
 
 news_items = "".join(f'<div style="padding:10px 0;border-bottom:1px solid #eee;"><b>{n["date"][:10]}</b> · <span style="color:#888;">{n["source"]}</span><br>{n["title"]}</div>' for n in news_data.get("news", [])[:5])
 
+# 权重进度条（对齐 app.py sidebar 的 st.progress 展示）
+cur_weights = WEIGHT_PROFILES[period]
+weight_bars_html = ""
+for dim_key, w_val in cur_weights.items():
+    pct = int(w_val * 100)
+    weight_bars_html += f'''<div style="margin:8px 0;">
+        <div style="font-size:13px;margin-bottom:3px;">{DIM_LABELS[dim_key]}: {pct}%</div>
+        <div style="background:#e5e7eb;border-radius:4px;height:10px;">
+            <div style="background:{DIM_COLORS[dim_key]};height:10px;border-radius:4px;width:{pct}%;"></div>
+        </div>
+    </div>'''
+
+RATING_EMOJI = {"买入": "🟢", "增持": "🔵", "中性": "🟡", "减持": "🔴"}
 def _report_item(r):
     tp = r.get("target_price")
     tp_str = f" | 目标价 ¥{tp}" if tp else ""
-    return f'<div style="padding:8px 0;border-bottom:1px solid #eee;"><b>{r.get("broker","")}</b> — <span style="color:#3B82F6;">{r.get("rating","")}</span>{tp_str}<br><span style="font-size:13px;color:#666;">{r.get("title","")}</span></div>'
+    rating = r.get("rating", "")
+    emoji = RATING_EMOJI.get(rating, "⚪")
+    return f'<div style="padding:8px 0;border-bottom:1px solid #eee;">{emoji} <b>{r.get("broker","")}</b> — {rating}{tp_str}<br><span style="font-size:13px;color:#666;">{r.get("title","")}</span></div>'
 report_items = "".join(_report_item(r) for r in reports.get("reports", [])[:5])
 
 compare_table = f'''
@@ -274,6 +323,8 @@ winner_text = f"🏆 综合最优：<b>{winner}</b>（{max(total_score, total_2)
 
 # 资金面摘要
 flow_summary = flow_data.get("summary", {})
+nb_trend_map = {"increasing": "📈 增持", "decreasing": "📉 减持", "stable": "➡️ 持平"}
+nb_trend_cn = nb_trend_map.get(nb.get("trend", "stable"), "N/A")
 flow_metrics = f'''
 <div style="display:flex;gap:12px;flex-wrap:wrap;">
     <div style="flex:1;text-align:center;padding:16px;background:#f8f9fa;border-radius:8px;">
@@ -287,6 +338,10 @@ flow_metrics = f'''
     <div style="flex:1;text-align:center;padding:16px;background:#f8f9fa;border-radius:8px;">
         <div style="font-size:12px;color:#666;">北向持股比例</div>
         <div style="font-size:22px;font-weight:700;color:#3B82F6;">{nb.get("holding_ratio","N/A")}%</div>
+    </div>
+    <div style="flex:1;text-align:center;padding:16px;background:#f8f9fa;border-radius:8px;">
+        <div style="font-size:12px;color:#666;">北向趋势</div>
+        <div style="font-size:22px;font-weight:700;">{nb_trend_cn}</div>
     </div>
 </div>'''
 
@@ -302,15 +357,11 @@ html = f'''<!DOCTYPE html>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }}
   .container {{ max-width: 1200px; margin: 0 auto; padding: 20px; }}
-  .header {{ background: linear-gradient(135deg, #1e3a5f, #2563eb); color: white; padding: 40px; border-radius: 16px; margin-bottom: 24px; }}
-  .header h1 {{ font-size: 28px; margin-bottom: 8px; }}
-  .header .subtitle {{ font-size: 14px; opacity: 0.8; }}
-  .score-badge {{ display: inline-block; background: rgba(255,255,255,0.2); padding: 12px 24px; border-radius: 12px; margin-top: 16px; }}
-  .score-badge .number {{ font-size: 48px; font-weight: 800; }}
-  .score-badge .label {{ font-size: 14px; margin-top: 4px; }}
+  .metric-card {{ text-align: center; padding: 16px; }}
   .section {{ background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }}
   .section h2 {{ font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #eee; }}
   .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
+  .grid-2-1 {{ display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }}
   .grid-4 {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }}
   .checklist {{ background: #f0fdf4; border-radius: 12px; padding: 24px; margin-bottom: 20px; }}
   .checklist h2 {{ color: #166534; }}
@@ -325,59 +376,55 @@ html = f'''<!DOCTYPE html>
 <div class="container">
 
 <!-- Header -->
-<div class="header">
-    <h1>📊 A股个股分析 Agent — 可视化测试报告</h1>
-    <div class="subtitle">Claude Agent SDK · 四维分析 · Mock 数据模式 · 生成时间: {pd.Timestamp.now().strftime("%Y-%m-%d %H:%M")}</div>
-    <div style="display:flex;gap:24px;margin-top:20px;flex-wrap:wrap;">
-        <div class="score-badge">
-            <div class="number">{total_score}</div>
-            <div class="label">{recommendation} {stars}</div>
+<div class="section">
+    <h1 style="font-size:24px;margin-bottom:4px;">📊 A股个股分析 Agent</h1>
+    <div style="font-size:13px;color:#888;margin-bottom:16px;">Claude Agent SDK · 四维分析 · 可视化测试 · Mock 数据模式</div>
+    <hr style="border:none;border-top:1px solid #eee;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;">
+        <div class="metric-card">
+            <div style="font-size:13px;color:#666;">{stock_name} ({stock_code})</div>
+            <div style="font-size:36px;font-weight:700;">{total_score} 分</div>
+            <div style="font-size:14px;color:#10B981;">▲ {recommendation}</div>
         </div>
-        <div style="padding-top:12px;">
-            <div style="font-size:20px;font-weight:700;">{stock_name} ({stock_code})</div>
-            <div style="font-size:14px;opacity:0.8;margin-top:4px;">投资周期: 中线 · 风险偏好: 稳健</div>
-            <div style="font-size:14px;opacity:0.8;">最新价: ¥{quote_data["current_price"]:.2f} ({quote_data["change_pct"]:+.2f}%)</div>
+        <div class="metric-card">
+            <div style="font-size:13px;color:#666;">星级评定</div>
+            <div style="font-size:28px;margin:8px 0;">{stars}</div>
+            <div style="font-size:13px;color:#888;">配置：稳健 / 中线 / 全面分析</div>
+        </div>
+        <div class="metric-card">
+            <div style="font-size:13px;color:#666;">最新价</div>
+            <div style="font-size:36px;font-weight:700;">¥{quote_data["current_price"]:.2f}</div>
+            <div style="font-size:14px;color:{"#EF4444" if quote_data["change_pct"] >= 0 else "#10B981"};">{quote_data["change_pct"]:+.2f}%</div>
         </div>
     </div>
 </div>
 
 <!-- 1. 四维评分卡 -->
 <div class="section">
-    <h2>📋 四维评分</h2>
+    <h2>四维评分</h2>
     {score_cards}
 </div>
 
-<!-- 2. 雷达图 + 子维度 -->
+<!-- 2. 雷达图 + 子维度详情 -->
 <div class="section">
-    <h2>🎯 雷达图与子维度评分</h2>
+    <h2>分析详情</h2>
     <div class="grid-2">
         <div>{charts["radar"]}</div>
-        <div class="grid-4">{sub_chart_html}</div>
+        <div>{dim_detail_html}</div>
     </div>
 </div>
 
-<!-- 3. 各维度关键发现 -->
+<!-- 4. K线图 + 技术指标（同一section，对齐 app.py） -->
 <div class="section">
-    <h2>🔍 各维度详细分析</h2>
-    <div class="grid-2">{all_findings}</div>
-</div>
-
-<!-- 4. K线图 -->
-<div class="section">
-    <h2>📈 K线走势与成交量</h2>
+    <h2>K线走势与技术指标</h2>
     {charts["kline"]}
-</div>
-
-<!-- 5. 技术指标 -->
-<div class="section">
-    <h2>📊 技术指标摘要</h2>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;">{tech_cards}</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:16px;">{tech_cards}</div>
 </div>
 
 <!-- 6. 资金流向 -->
 <div class="section">
-    <h2>💰 资金流向</h2>
-    <div class="grid-2">
+    <h2>资金流向</h2>
+    <div class="grid-2-1">
         <div>{charts["capital_flow"]}</div>
         <div>{flow_metrics}</div>
     </div>
@@ -385,34 +432,32 @@ html = f'''<!DOCTYPE html>
 
 <!-- 7. 新闻与研报 -->
 <div class="section">
-    <h2>📰 新闻与券商研报</h2>
+    <h2>新闻与公告</h2>
     <div class="grid-2">
         <div>
-            <h3 style="font-size:15px;margin-bottom:12px;">最新新闻</h3>
+            <h3 style="font-size:15px;margin-bottom:12px;">📰 最新新闻</h3>
             {news_items}
         </div>
         <div>
-            <h3 style="font-size:15px;margin-bottom:12px;">券商研报</h3>
+            <h3 style="font-size:15px;margin-bottom:12px;">📋 券商研报</h3>
             {report_items}
-            <div style="margin-top:16px;">{charts["rating_pie"]}</div>
+            <div style="margin-top:16px;"><b>评级分布</b>{charts["rating_pie"]}</div>
         </div>
     </div>
 </div>
 
-<!-- 8. 权重对比 -->
+<!-- 8. 当前权重配置（对齐 app.py 侧边栏） -->
 <div class="section">
-    <h2>⚖️ 投资周期权重影响</h2>
-    {charts["weight_compare"]}
-    <div style="margin-top:12px;font-size:13px;color:#666;">
-        短线权重: 基本面15% / 技术面40% / 资金面30% / 消息面15%<br>
-        中线权重: 基本面35% / 技术面25% / 资金面20% / 消息面20%<br>
-        长线权重: 基本面45% / 技术面15% / 资金面15% / 消息面25%
+    <h2>当前权重配置（中线）</h2>
+    {weight_bars_html}
+    <div style="margin-top:16px;font-size:13px;color:#888;">
+        切换投资周期会改变四维权重分配，从而影响综合评分。短线侧重技术面和资金面，长线侧重基本面和消息面。
     </div>
 </div>
 
 <!-- 9. 多股对比 -->
 <div class="section">
-    <h2>🆚 多股对比：{stock_name} vs {name_2}</h2>
+    <h2>📊 多股对比</h2>
     {compare_table}
     <div class="grid-2">
         <div>{charts["compare_radar"]}</div>
